@@ -281,7 +281,7 @@ async def user_info(interaction: discord.Interaction, member: discord.Member = N
     embed.set_thumbnail(url=m.display_avatar.url)
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="server-info", description="Sunucunda sunucu hakkında bilgi gösterir.")
+@bot.tree.command(name="server-info", description="Sunucu hakkında bilgi gösterir.")
 async def server_info(interaction: discord.Interaction):
     guild = interaction.guild
     embed = discord.Embed(title=f"Sunucu Bilgisi: {guild.name}", color=discord.Color.purple())
