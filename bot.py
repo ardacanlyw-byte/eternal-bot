@@ -1,12 +1,28 @@
 import os
 import json
 import datetime
+import threading
+from flask import Flask
 import discord
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-# Token yükleme
+# --- RENDER PORT UYARISINI ÇÖZMEK İÇİN WEB SUNUCUSU ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot aktif ve çalışıyor!"
+
+def run_web():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = threading.Thread(target=run_web)
+    t.start()
+# -----------------------------------------------------
+
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -33,7 +49,6 @@ def save_partner_data(data):
     with open(PARTNERS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-# Basit hafıza içi uyarı sistemi
 warnings_db = {}
 
 @bot.event
@@ -86,19 +101,15 @@ async def on_member_unban(guild, user):
         embed.add_field(name="Kullanıcı", value=f"{user} ({user.id})", inline=False)
         await log_channel.send(embed=embed)
 
-# --- PARTNER SİSTEMİ (İstediğin Görsel Formatında İngilizce) ---
+# --- PARTNER SİSTEMİ ---
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    # Partner kanal kontrolü
     if message.channel.name == "╰꒷🌼・partners":
-        # Discord davet linki algılama kontrolü
         if "discord.gg/" in message.content or "discord.com/invite/" in message.content:
             data = load_partner_data()
-            
-            # Gün değişimi kontrolü (Basit günlük sıfırlama mantığı)
             current_day = datetime.datetime.utcnow().day
             if data.get("last_reset_day") != current_day:
                 data["daily"] = 0
@@ -109,7 +120,6 @@ async def on_message(message):
             data["total"] += 1
             save_partner_data(data)
 
-            # Gönderdiğin ekran görüntüsündeki tasarıma birebir uygun İngilizce embed
             embed = discord.Embed(color=discord.Color.green(), timestamp=datetime.datetime.utcnow())
             embed.set_author(name="Partner Record", icon_url=message.author.display_avatar.url)
             embed.description = f"| {message.author.mention} sent a partner message!"
@@ -119,10 +129,59 @@ async def on_message(message):
             embed.add_field(name="🏆 All Time", value=f"{data['total']} partner", inline=False)
             
             embed.set_footer(text=f"ID: {message.id}")
-            
             await message.channel.send(embed=embed)
 
     await bot.process_commands(message)
+
+
+# --- MODERN YARDIM KOMUTU (/help) ---
+@bot.tree.command(name="help", description="Botun modern kategorize edilmiş komut listesini gösterir.")
+async def help_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="✨ Eternal Bot - Komut Menüsü",
+        description="Aşağıdan botun tüm moderasyon, uyarı, sohbet ve bilgi komutlarına göz atabilirsin.",
+        color=discord.Color.blurple(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    embed.set_thumbnail(url=bot.user.display_avatar.url)
+    
+    embed.add_field(
+        name="🛡️ Üye İşlemleri (Moderasyon)",
+        value=(
+            "`/ban` - Kullanıcıyı kalıcı yasaklar.\n"
+            "`/tempban` - Süreli yasaklar.\n"
+            "`/unban` - Yasak kaldırma.\n"
+            "`/kick` - Kullanıcıyı atar.\n"
+            "`/mute` / `/tempmute` - Susturma işlemleri.\n"
+            "`/unmute` - Susturmayı kaldırır."
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="⚠️ Uyarı ve İhlal Yönetimi",
+        value=(
+            "`/warn` - Kullanıcıya uyarı verir.\n"
+            "`/infractions` - Uyarı geçmişini gösterir.\n"
+            "`/clear-all-infractions` - Tüm uyarıları temizler."
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="💬 Sohbet ve Bilgi Komutları",
+        value=(
+            "`/clear` - Toplu mesaj siler.\n"
+            "`/slowmode` - Yavaş mod ayarlar.\n"
+            "`/user-info` - Kullanıcı bilgisi gösterir.\n"
+            "`/role-info` - Rol bilgisi gösterir.\n"
+            "`/server-info` - Sunucu bilgisi gösterir."
+        ),
+        inline=False
+    )
+    
+    embed.set_footer(text=f"İsteyen: {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # --- ÜYE İŞLEMLERİ (SLASH KOMUTLARI) ---
@@ -132,18 +191,12 @@ async def on_message(message):
 async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "Sebep belirtilmedi"):
     await member.ban(reason=reason)
     await interaction.response.send_message(f"Başarıyla yasaklandı: {member.mention}", ephemeral=True)
-    log_channel = discord.utils.get(interaction.guild.text_channels, name="︰꒷❗・log")
-    if log_channel:
-        await log_channel.send(f"🔨 **{member}** sunucudan banlandı. Yetkili: {interaction.user.mention}")
 
 @bot.tree.command(name="kick", description="Kullanıcıyı sunucudan atar.")
 @app_commands.checks.has_permissions(kick_members=True)
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "Sebep belirtilmedi"):
     await member.kick(reason=reason)
     await interaction.response.send_message(f"Başarıyla atıldı: {member.mention}", ephemeral=True)
-    log_channel = discord.utils.get(interaction.guild.text_channels, name="︰꒷❗・log")
-    if log_channel:
-        await log_channel.send(f"👢 **{member}** sunucudan atıldı. Yetkili: {interaction.user.mention}")
 
 @bot.tree.command(name="unban", description="Kullanıcının yasaklamasını kaldırır.")
 @app_commands.checks.has_permissions(ban_members=True)
@@ -155,7 +208,7 @@ async def unban(interaction: discord.Interaction, user_id: str):
 @bot.tree.command(name="mute", description="Kullanıcıyı süresiz susturur (Timeout).")
 @app_commands.checks.has_permissions(moderate_members=True)
 async def mute(interaction: discord.Interaction, member: discord.Member, reason: str = "Sebep yok"):
-    duration = datetime.timedelta(days=27) # Discord max timeout sınırı
+    duration = datetime.timedelta(days=27)
     await member.timeout(duration, reason=reason)
     await interaction.response.send_message(f"{member.mention} susturuldu.", ephemeral=True)
 
@@ -228,7 +281,7 @@ async def user_info(interaction: discord.Interaction, member: discord.Member = N
     embed.set_thumbnail(url=m.display_avatar.url)
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="server-info", description="Sunucu hakkında bilgi gösterir.")
+@bot.tree.command(name="server-info", description="Sunucunda sunucu hakkında bilgi gösterir.")
 async def server_info(interaction: discord.Interaction):
     guild = interaction.guild
     embed = discord.Embed(title=f"Sunucu Bilgisi: {guild.name}", color=discord.Color.purple())
@@ -245,6 +298,7 @@ async def role_info(interaction: discord.Interaction, role: discord.Role):
     embed.add_field(name="Üye Sayısı", value=len(role.members), inline=True)
     await interaction.response.send_message(embed=embed)
 
-# Botu çalıştır
-bot.run(TOKEN)
-
+# Flask sunucusunu başlat ve botu çalıştır
+if __name__ == "__main__":
+    keep_alive()
+    bot.run(TOKEN)
